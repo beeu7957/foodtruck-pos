@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Tha Shack Spot POS</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; font-size: 18px; max-width: 900px; margin: auto; background: #fafafa; }
+    h1, h2 { text-align: center; }
+    input, button, select { font-size: 18px; padding: 10px; margin: 5px; border-radius: 6px; border: 1px solid #ccc; }
+    button { cursor: pointer; }
+    .add-btn { background: #4CAF50; color: white; border: none; }
+    .save-btn { background: #2196F3; color: white; font-size: 22px; padding: 15px; border: none; width: 100%; margin-top: 15px; }
+    .archive-btn { background: #9C27B0; color: white; border: none; padding: 10px 15px; margin-top: 10px; border-radius: 6px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 15px; background: white; border-radius: 8px; overflow: hidden; }
+    th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+    th { background: #f0f0f0; }
+    tr:nth-child(even) { background: #f9f9f9; }
+    .section { background: white; padding: 15px; border-radius: 10px; margin-bottom: 25px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    .flex { display: flex; gap: 10px; flex-wrap: wrap; }
+    .done { filter: blur(2px) grayscale(80%); opacity: 0.6; }
+    .done-btn { background: #ff5722; color: white; border: none; padding: 6px 12px; border-radius: 5px; }
+    #modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); }
+    #modalContent { background:white; padding:20px; border-radius:8px; max-width:500px; margin:80px auto; }
+    #closeModal { float:right; background:#ccc; border:none; padding:5px 10px; }
+  </style>
+</head>
+<body>
+  <h1>🍔 Tha Shack Spot POS</h1>
+
+  <!-- Order Entry -->
+  <div class="section">
+    <h2>New Order</h2>
+    <input id="customer" placeholder="Customer Name" style="width: 100%;">
+
+    <div class="flex">
+      <select id="itemName" onchange="setPrice()">
+        <option value="">-- Select Item --</option>
+        <option value="Wing Dings" data-price="5">Wing Dings - $5</option>
+        <option value="Fish Sandwich" data-price="4">Fish Sandwich - $4</option>
+        <option value="Fries" data-price="2">Fries - $2</option>
+        <option value="Turkey Chops" data-price="8">Turkey Chops - $8</option>
+        <option value="Hot Dog" data-price="2">Hot Dog - $2</option>
+        <option value="Burger" data-price="2">Burger - $2</option>
+      </select>
+
+      <input id="itemPrice" type="number" placeholder="Price">
+      <input id="itemQty" type="number" min="1" value="1">
+      <button class="add-btn" onclick="addItem()">➕ Add</button>
+    </div>
+
+    <table id="cartTable">
+      <thead>
+        <tr><th>Qty</th><th>Item</th><th>Price</th><th>Subtotal</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <h3 id="total">Total: $0.00</h3>
+    <button class="save-btn" onclick="saveOrder()">✅ Save Order</button>
+  </div>
+
+  <!-- Past Orders -->
+  <div class="section">
+    <h2>📋 Past Orders</h2>
+    <button class="archive-btn" onclick="archiveOrders()">📦 Archive All Orders</button>
+    <table id="ordersTable">
+      <thead>
+        <tr><th>Customer</th><th>Total</th><th>Date</th><th>Time</th><th>Action</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <!-- Archived Orders -->
+  <div class="section">
+    <h2>🗂 Archived Orders</h2>
+    <table id="archiveTable">
+      <thead>
+        <tr><th>Customer</th><th>Total</th><th>Date</th><th>Time</th><th>Action</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <!-- Modal for Order Details -->
+  <div id="modal">
+    <div id="modalContent">
+      <button id="closeModal" onclick="closeModal()">❌ Close</button>
+      <h2>Order Details</h2>
+      <div id="orderDetails"></div>
+      <button onclick="printOrder()" style="background:#4CAF50;color:white;border:none;padding:10px 15px;border-radius:5px;margin-top:10px;">🖨 Print Receipt</button>
+    </div>
+  </div>
+
+<script>
+  let items = [];
+  let orders = JSON.parse(localStorage.getItem("orders") || "[]");
+  let archive = JSON.parse(localStorage.getItem("archive") || "[]");
+  let currentOrder = null;
+
+  function setPrice() {
+    const select = document.getElementById("itemName");
+    const price = select.options[select.selectedIndex].getAttribute("data-price");
+    document.getElementById("itemPrice").value = price || "";
+  }
+
+  function addItem() {
+    const select = document.getElementById("itemName");
+    const name = select.value;
+    const price = parseFloat(document.getElementById("itemPrice").value);
+    const qty = parseInt(document.getElementById("itemQty").value);
+
+    if (!name || isNaN(price) || isNaN(qty)) {
+      alert("Please select an item and quantity.");
+      return;
+    }
+
+    items.push({ name, price, qty });
+    renderCart();
+
+    select.value = "";
+    document.getElementById("itemPrice").value = "";
+    document.getElementById("itemQty").value = 1;
+  }
+
+  function renderCart() {
+    const tbody = document.querySelector("#cartTable tbody");
+    tbody.innerHTML = "";
+    let total = 0;
+    items.forEach(i => {
+      const subtotal = i.price * i.qty;
+      total += subtotal;
+      tbody.innerHTML += `<tr>
+        <td>${i.qty}</td><td>${i.name}</td><td>$${i.price.toFixed(2)}</td><td>$${subtotal.toFixed(2)}</td>
+      </tr>`;
+    });
+    document.getElementById("total").innerText = "Total: $" + total.toFixed(2);
+  }
+
+  function saveOrder() {
+    const customer = document.getElementById("customer").value.trim();
+    if (!customer || items.length === 0) {
+      alert("Enter customer name and add items first!");
+      return;
+    }
+
+    let total = items.reduce((sum, i) => sum + i.price * i.qty, 0);
+    const now = new Date();
+    const order = { 
+      customer, 
+      items, 
+      total, 
+      date: now.toLocaleDateString(), 
+      time: now.toLocaleTimeString(), 
+      done: false 
+    };
+
+    orders.push(order);
+    localStorage.setItem("orders", JSON.stringify(orders));
+    renderOrders();
+
+    items = [];
+    document.getElementById("customer").value = "";
+    renderCart();
+  }
+
+  function markDone(index) {
+    orders[index].done = true;
+    localStorage.setItem("orders", JSON.stringify(orders));
+    renderOrders();
+  }
+
+  function archiveOrders() {
+    archive = archive.concat(orders);
+    orders = [];
+    localStorage.setItem("orders", JSON.stringify(orders));
+    localStorage.setItem("archive", JSON.stringify(archive));
+    renderOrders();
+    renderArchive();
+  }
+
+  function viewDetails(order) {
+    currentOrder = order;
+    let html = `<p><strong>Customer:</strong> ${order.customer}</p>
+                <p><strong>Date:</strong> ${order.date} ${order.time}</p>
+                <table><tr><th>Qty</th><th>Item</th><th>Price</th><th>Subtotal</th></tr>`;
+    order.items.forEach(i => {
+      html += `<tr><td>${i.qty}</td><td>${i.name}</td><td>$${i.price.toFixed(2)}</td><td>$${(i.price*i.qty).toFixed(2)}</td></tr>`;
+    });
+    html += `</table><h3>Total: $${order.total.toFixed(2)}</h3>`;
+    document.getElementById("orderDetails").innerHTML = html;
+    document.getElementById("modal").style.display = "block";
+  }
+
+  function closeModal() {
+    document.getElementById("modal").style.display = "none";
+  }
+
+  function printOrder() {
+    if (!currentOrder) return;
+    let printWindow = window.open('', '_blank', 'width=400,height=600');
+    printWindow.document.write(`
+      <html>
+      <head><title>Receipt - Tha Shack Spot</title>
+      <style>
+        body { font-family: monospace; padding: 20px; }
+        h2 { text-align: center; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        td, th { border-bottom: 1px solid #ddd; padding: 5px; text-align: left; }
+        th { background: #f0f0f0; }
+        h3 { text-align: right; }
+      </style>
+      </head>
+      <body>
+        <h2>Tha Shack Spot</h2>
+        <p><strong>Customer:</strong> ${currentOrder.customer}</p>
+        <p><strong>Date:</strong> ${currentOrder.date} ${currentOrder.time}</p>
+        <table>
+          <tr><th>Qty</th><th>Item</th><th>Price</th><th>Subtotal</th></tr>
+          ${currentOrder.items.map(i => `
+            <tr><td>${i.qty}</td><td>${i.name}</td><td>$${i.price.toFixed(2)}</td><td>$${(i.price*i.qty).toFixed(2)}</td></tr>
+          `).join("")}
+        </table>
+        <h3>Total: $${currentOrder.total.toFixed(2)}</h3>
+        <p style="text-align:center;">🍔 Thanks for visiting Tha Shack Spot!</p>
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.print();
+  }
+
+  function renderOrders() {
+    const tbody = document.querySelector("#ordersTable tbody");
+    tbody.innerHTML = "";
+    orders.forEach((o, i) => {
+      tbody.innerHTML += `<tr class="${o.done ? 'done' : ''}">
+        <td>${o.customer}</td>
+        <td>$${o.total.toFixed(2)}</td>
+        <td>${o.date}</td>
+        <td>${o.time}</td>
+        <td>
+          ${o.done ? '✅ Done' : `<button class="done-btn" onclick="markDone(${i})">Done</button>`}
+          <button onclick='viewDetails(${JSON.stringify(o)})'>View</button>
+        </td>
+      </tr>`;
+    });
+  }
+
+  function renderArchive() {
+    const tbody = document.querySelector("#archiveTable tbody");
+    tbody.innerHTML = "";
+    archive.forEach(o => {
+      tbody.innerHTML += `<tr>
+        <td>${o.customer}</td>
+        <td>$${o.total.toFixed(2)}</td>
+        <td>${o.date}</td>
+        <td>${o.time}</td>
+        <td><button onclick='viewDetails(${JSON.stringify(o)})'>View</button></td>
+      </tr>`;
+    });
+  }
+
+  renderOrders();
+  renderArchive();
+</script>
+</body>
+</html>
